@@ -4,7 +4,7 @@ import subprocess
 
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget, QDockWidget,
-                             QTextBrowser, QLineEdit, QPushButton, QListWidget, QHBoxLayout)
+                             QTextBrowser, QLineEdit, QPushButton, QListWidget, QHBoxLayout, QMenuBar, QMenu, QAction)
 
 
 def parse_filename(folder_path):
@@ -107,12 +107,18 @@ class InfoDockWidget(QDockWidget):
         if file_dict:
             if file_dict.get('orig'):
                 self.text_browser.append(f"Orig: {file_dict.get('orig')}")
-            self.text_browser.append(f"ID: {file_dict.get('id')}")
-            self.text_browser.append(f"Src: {file_dict.get('src')}")
-            self.text_browser.append(f"Time: {file_dict.get('time')}")
-            self.text_browser.append(f"Execs: {file_dict.get('execs')}")
-            self.text_browser.append(f"Op: {file_dict.get('op')}")
-            self.text_browser.append(f"Rep: {file_dict.get('rep')}")
+            if file_dict.get('id'):
+                self.text_browser.append(f"ID: {file_dict.get('id')}")
+            if file_dict.get('src'):
+                self.text_browser.append(f"Src: {file_dict.get('src')}")
+            if file_dict.get('time'):
+                self.text_browser.append(f"Time: {file_dict.get('time')}")
+            if file_dict.get('execs'):
+                self.text_browser.append(f"Execs: {file_dict.get('execs')}")
+            if file_dict.get('op'):
+                self.text_browser.append(f"Op: {file_dict.get('op')}")
+            if file_dict.get('rep'):
+                self.text_browser.append(f"Rep: {file_dict.get('rep')}")
 
 
 # Класс для вывода названия файла
@@ -168,7 +174,7 @@ class FilterWidget(QWidget):
         self.search_button.clicked.connect(self.search)
 
         self.result_list = QListWidget()
-        self.result_list.itemClicked.connect(self.select_item)
+        self.result_list.currentItemChanged.connect(self.select_item)
 
         layout.addWidget(self.search_input)
         layout.addWidget(self.search_button)
@@ -230,7 +236,35 @@ class MainWindow(QMainWindow):
         self.filter_dock.setWidget(self.filter_widget)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.filter_dock)
 
-        self.tree.itemClicked.connect(self.show_item_info)
+        self.tree.currentItemChanged.connect(self.show_item_info)
+
+        # Добавляем меню
+        self.create_menu()
+
+    def create_menu(self):
+        menubar = self.menuBar()
+        run_menu = menubar.addMenu("Run widgets")
+
+        info_action = QAction("Info", self)
+        info_action.triggered.connect(self.show_info_dock)
+        run_menu.addAction(info_action)
+
+        hex_dump_action = QAction("Hex Dump", self)
+        hex_dump_action.triggered.connect(self.show_hex_dump_dock)
+        run_menu.addAction(hex_dump_action)
+
+        filter_action = QAction("Filter", self)
+        filter_action.triggered.connect(self.show_filter_dock)
+        run_menu.addAction(filter_action)
+
+    def show_info_dock(self):
+        self.info_dock.setVisible(True)
+
+    def show_hex_dump_dock(self):
+        self.hex_dump_dock.setVisible(True)
+
+    def show_filter_dock(self):
+        self.filter_dock.setVisible(True)
 
     def populate_tree(self, parsed_files):
         id_to_tree_item = {}
