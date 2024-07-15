@@ -8,86 +8,83 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QTreeWidget, QTreeWidget
 
 
 def parse_filename(folder_path):
-    # Проверка корректности указанного пути
     if not os.path.isdir(folder_path):
         print(f"Ошибка при указании пути '{folder_path}'")
-        return
+        return []
 
-    # Получаем список файлов из папки
-    files = sorted(os.listdir(folder_path))
     parsed_files = []
 
-    # Проходим по каждому файлу и записываем части названиий в словарь
-    for filename in files:
-        print(filename)
-        parts = filename.split(',')
-        file_dict = {}
+    for subfolder in ['queue', 'crashes', 'hangs']:
+        subfolder_path = os.path.join(folder_path, subfolder)
+        if not os.path.isdir(subfolder_path):
+            continue
 
-        for part in parts:
-            key_value = part.split(':')
-            if len(key_value) == 2:
-                key = key_value[0].strip()
-                value = key_value[1].strip()
+        files = sorted(os.listdir(subfolder_path))
+        for filename in files:
+            parts = filename.split(',')
+            file_dict = {}
 
-                # Преобразование в число для указанных ключей
-                if key in ['id', 'time', 'execs', 'rep']:
-                    try:
-                        value = int(value)
-                    except ValueError:
-                        pass  # Игнорировать, если значение не числовое
+            for part in parts:
+                key_value = part.split(':')
+                if len(key_value) == 2:
+                    key = key_value[0].strip()
+                    value = key_value[1].strip()
 
-                # Преобразование src в список int
-                if key == 'src':
-                    if '+' in value:
+                    if key in ['id', 'time', 'execs', 'rep']:
                         try:
-                            value = [int(v) for v in value.split('+')]
+                            value = int(value)
                         except ValueError:
-                            value = [value]  # Если не удалось преобразовать, оставляем как есть (но в списке)
-                    else:
-                        try:
-                            value = [int(value)]
-                        except ValueError:
-                            value = [value]  # Если не удалось преобразовать, оставляем как есть (но в списке)
+                            pass
 
-                file_dict[key] = value
-                file_dict['filename'] = filename
-        parsed_files.append(file_dict)
+                    if key == 'src':
+                        if '+' in value:
+                            try:
+                                value = [int(v) for v in value.split('+')]
+                            except ValueError:
+                                value = [value]
+                        else:
+                            try:
+                                value = [int(value)]
+                            except ValueError:
+                                value = [value]
+
+                    file_dict[key] = value
+            file_dict['filename'] = filename
+            file_dict['folder'] = subfolder
+            parsed_files.append(file_dict)
+
     return parsed_files
 
 
 def reformat_dict(parsed_files):
-    # Создаем словарь для быстрого доступа к элементам по id
     id_to_element = {}
 
     for file_dict in parsed_files:
-        id_value = file_dict.get('id')  # Получаем значение ключа 'id' из текущего элемента file_dict
-        id_to_element[id_value] = file_dict  # Добавляем в словарь id_to_element: ключ - id_value, значение - file_dict
+        id_value = file_dict.get('id')
+        id_to_element[id_value] = file_dict
 
-    # Проходимся по каждому элементу и проверяем условия
     for file_dict in parsed_files:
         src_values = file_dict.get('src')
-        if src_values is None:
-            continue  # Пропускаем элемент, если src_value = None
+        if src_values is None or file_dict.get('folder') in ['crashes', 'hangs']:
+            continue
 
         for src_value in src_values:
             try:
-                # Находим элементы, у которых id равен src
                 parent_element = id_to_element.get(src_value)
                 if parent_element:
-                    # Добавляем текущий элемент в children
                     if 'children' not in parent_element:
-                        parent_element['children'] = [file_dict['id']]  # Создаем список с текущим id
+                        parent_element['children'] = [file_dict['id']]
                     else:
-                        parent_element['children'].append(file_dict['id'])  # Добавляем id в существующий список
+                        parent_element['children'].append(file_dict['id'])
             except ValueError:
-                continue  # Пропускаем значение, если оно не может быть преобразовано в int
+                continue
 
     return parsed_files
 
 
 def print_hierarchy(node, node_dict, level=0):
     indent = "--" * level
-    print(f"{indent}'id': {node['id']}")
+    #print(f"{indent}'id': {node['id']}")
     children = node.get('children', [])
     for child_id in children:
         child_node = node_dict[child_id]
@@ -119,19 +116,6 @@ class InfoDockWidget(QDockWidget):
                 self.text_browser.append(f"Op: {file_dict.get('op')}")
             if file_dict.get('rep'):
                 self.text_browser.append(f"Rep: {file_dict.get('rep')}")
-
-
-# Класс для вывода названия файла
-# class NameDockWidget(QDockWidget):
-#     def __init__(self):
-#         super().__init__()
-#         self.setWindowTitle('File name')
-#         self.setWidget(QTextBrowser())
-#         self.text_browser = self.widget()
-#
-#     def update_name(self, file_dict):
-#         self.text_browser.clear()
-#         self.text_browser.append(file_dict)
 
 
 class HexDumpDockWidget(QDockWidget):
@@ -214,11 +198,10 @@ class MainWindow(QMainWindow):
         main_layout = QVBoxLayout()
 
         self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["ID", "Src"])
+        self.tree.setHeaderLabels(["ID", "Src", "Index"])
 
         self.id_to_element = {file_dict['id']: file_dict for file_dict in parsed_files}
         self.populate_tree(parsed_files)
-        # self.tree.findItems('11', Qt.MatchContains|Qt.MatchRecursive)
 
         main_layout.addWidget(self.tree)
         main_widget.setLayout(main_layout)
@@ -267,37 +250,42 @@ class MainWindow(QMainWindow):
         self.filter_dock.setVisible(True)
 
     def populate_tree(self, parsed_files):
-        id_to_tree_item = {}
+        c_top_level_items = {}
+        h_top_level_items = {}
+        q_top_level_items = {}
 
-        # Создаем QTreeWidgetItem для каждого элемента и добавляем их в словарь
         for file_dict in parsed_files:
-            tree_item = QTreeWidgetItem([str(file_dict["id"]), ', '.join(map(str, file_dict.get("src", [])))])
-            id_to_tree_item[file_dict["id"]] = tree_item
+            index = {'queue': 'Q', 'crashes': 'C', 'hangs': 'H'}[file_dict['folder']]
+            tree_item = QTreeWidgetItem([str(file_dict["id"]), ', '.join(map(str, file_dict.get("src", []))), index])
+            if file_dict['folder'] == 'queue':
+                q_top_level_items[file_dict["id"]] = tree_item
+            elif file_dict['folder'] == 'crashes':
+                c_top_level_items[file_dict["id"]] = tree_item
+            elif file_dict['folder'] == 'hangs':
+                h_top_level_items[file_dict["id"]] = tree_item
 
-        # Добавляем элементы на верхний уровень, если у них нет родителей
         for file_dict in parsed_files:
-            if not file_dict.get("src"):
-                self.tree.addTopLevelItem(id_to_tree_item[file_dict["id"]])
+            if file_dict['folder'] == 'queue':
+                if not file_dict.get("src"):
+                    self.tree.addTopLevelItem(q_top_level_items[file_dict["id"]])
+            elif file_dict['folder'] == 'crashes':
+                self.tree.addTopLevelItem(c_top_level_items[file_dict["id"]])
+            elif file_dict['folder'] == 'hangs':
+                self.tree.addTopLevelItem(h_top_level_items[file_dict["id"]])
 
-        # Добавляем дочерние элементы к родителям
         for file_dict in parsed_files:
-            tree_item = id_to_tree_item[file_dict["id"]]
-
-            for parent_id in file_dict.get("src", []):
-
-                if parent_id in id_to_tree_item:
-                    # addChild добавляет элемент только единожды
-                    # if file_dict["id"] == 45:
-                    #     tree_item = QTreeWidgetItem([str(file_dict["id"]), ', '.join(map(str, file_dict.get("src", [])))])
-                    parent_item = id_to_tree_item[parent_id]
+            if file_dict['folder'] not in ['crashes', 'hangs']:
+                tree_item = q_top_level_items[file_dict["id"]]
+                for parent_id in file_dict.get("src", []):
+                    parent_item = q_top_level_items[parent_id]
                     parent_item.addChild(tree_item)
 
     def show_item_info(self, item):
         item_id = int(item.text(0))
-        file_dict = self.id_to_element.get(item_id)
+        file_dict = next((d for d in self.parsed_files if d["id"] == item_id), None)
         self.info_dock.update_info(file_dict)
         if file_dict and 'filename' in file_dict:
-            file_path = os.path.join(folder_path, file_dict['filename'])
+            file_path = os.path.join(folder_path, file_dict['folder'], file_dict['filename'])
             hex_dump_html = generate_hex_dump(file_path)
             self.hex_dump_dock.update_hex_dump(hex_dump_html)
 
@@ -327,8 +315,8 @@ if __name__ == '__main__':
     main_win.show()
 
     # Вывод
-    for file_dict in reformatted_files:
-        print(file_dict)
+    # for file_dict in reformatted_files:
+    #     print(file_dict)
 
     root_node = reformatted_files[0]
 
