@@ -176,14 +176,16 @@ class FilterWidget(QWidget):
                                   search_term in str(file_dict.get('id', ''))]
 
                 for item in matching_items:
-                    self.result_list.addItem(str(item['id']))
+                    self.result_list.addItem(f"{item['folder']}: {item['id']}")
 
             except ValueError:
                 pass
 
     def select_item(self, item):
-        item_id = int(item.text())
-        self.main_window.select_item_in_tree(item_id)
+        if item:
+            folder, item_id = item.text().split(': ')
+            item_id = int(item_id)
+            self.main_window.select_item_in_tree(folder, item_id)
 
 
 class MainWindow(QMainWindow):
@@ -282,19 +284,23 @@ class MainWindow(QMainWindow):
 
     def show_item_info(self, item):
         item_id = int(item.text(0))
-        file_dict = next((d for d in self.parsed_files if d["id"] == item_id), None)
+        index = item.text(2)
+        folder = {'Q': 'queue', 'C': 'crashes', 'H': 'hangs'}[index]
+        file_dict = next((d for d in self.parsed_files if d["id"] == item_id and d['folder'] == folder), None)
         self.info_dock.update_info(file_dict)
         if file_dict and 'filename' in file_dict:
             file_path = os.path.join(folder_path, file_dict['folder'], file_dict['filename'])
             hex_dump_html = generate_hex_dump(file_path)
             self.hex_dump_dock.update_hex_dump(hex_dump_html)
 
-    def select_item_in_tree(self, item_id):
+    def select_item_in_tree(self, folder, item_id):
         items = self.tree.findItems(str(item_id), Qt.MatchExactly | Qt.MatchRecursive, 0)
         if items:
-            item = items[0]
-            self.tree.setCurrentItem(item)
-            self.show_item_info(item)
+            for item in items:
+                if item.text(2) == {'queue': 'Q', 'crashes': 'C', 'hangs': 'H'}[folder]:
+                    self.tree.setCurrentItem(item)
+                    self.show_item_info(item)
+                    break
 
 
 if __name__ == '__main__':
